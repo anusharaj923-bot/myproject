@@ -1,0 +1,60 @@
+import os
+import json
+import hashlib
+
+from flask import Flask, jsonify, render_template
+
+app = Flask(__name__)
+
+FOLDER = "monitored_files"
+BASELINE_FILE = "baseline.json"
+
+
+def calculate_hash(filepath):
+    sha256 = hashlib.sha256()
+
+    with open(filepath, "rb") as file:
+        while chunk := file.read(4096):
+            sha256.update(chunk)
+
+    return sha256.hexdigest()
+
+
+def get_files():
+    files = {}
+
+    if not os.path.exists(FOLDER):
+        os.makedirs(FOLDER)
+
+    for root, dirs, filenames in os.walk(FOLDER):
+        for filename in filenames:
+            path = os.path.join(root, filename)
+            files[path] = calculate_hash(path)
+
+    return files
+
+
+@app.route("/")
+def home():
+    return render_template("index.html")
+
+
+@app.route("/create-baseline", methods=["POST"])
+def create_baseline():
+    files = get_files()
+
+    with open(BASELINE_FILE, "w") as file:
+        json.dump(files, file, indent=4)
+
+    return jsonify({
+        "message": "Baseline created successfully!",
+        "files": len(files)
+    })
+
+
+@app.route("/check-integrity", methods=["GET"])
+def check_integrity():
+
+    if not os.path.exists(BASELINE_FILE):
+        return jsonify({
+            "error": "No baseline found
